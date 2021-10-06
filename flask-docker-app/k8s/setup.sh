@@ -56,3 +56,18 @@ sed -i "s/public-subnets/$subnets/g" flaskALBIngress_query2.yaml
 sed -i "s/sec-grp/$sg/g" flaskALBIngress_query.yaml
 sed -i "s/sec-grp/$sg/g" flaskALBIngress_query2.yaml
 kubectl apply -f flaskALBIngress_query.yaml
+
+set +x
+echo "================"
+echo "--CHECK OUTPUT--"
+echo "================"
+set -x
+kubectl get deploy -n flask-alb
+kubectl get svc -n flask-alb
+kubectl get ingress -n flask-alb
+kubectl get pods -n kube-system
+kubectl get pods -n flask-alb
+set +x
+echo "========================"
+echo "------END EXECUTION-----"
+echo "========================"

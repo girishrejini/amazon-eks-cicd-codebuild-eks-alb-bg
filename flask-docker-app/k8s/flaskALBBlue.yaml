@@ -34,11 +34,28 @@ spec:
         image: public.ecr.aws/p8v8e7e5/myartifacts:flask-image-grey
         ports:
           - containerPort: 5000
-        # command:
-        #   - "sh"
-        #   - "-c"
-        #   - "yum install -y python3-pip && tail -f /var/log/yum.log "
         resources:
           limits:
             memory: "500Mi"
             cpu: "0.25"
+        env:
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        - name: POD_SERVICE_ACCOUNT
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.serviceAccountName

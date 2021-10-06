@@ -35,13 +35,17 @@ export class CdkStackALBEksBg extends cdk.Stack {
       outputClusterName: true,
     });
 
+    /**
+     * Create a new ECR repo to store the docker images
+     */
     const ecrRepo = new ecr.Repository(this, 'EcrRepo');
 
+    /**
+     * Create a new CodeCommit repo to store the code
+     */
     const repository = new codecommit.Repository(this, 'CodeCommitRepo', {
       repositoryName: `${this.stackName}-repo`
     });
-
-
 
     // CODEBUILD - project
     const project = new codebuild.Project(this, 'MyProject', {
@@ -87,6 +91,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
               "isDeployed=$(kubectl get deploy -n flask-alb -o json | jq '.items[0]')",
               "deploy8080=$(kubectl get svc -n flask-alb -o wide | grep 8080: | tr ' ' '\n' | grep app= | sed 's/app=//g')",
               "echo $isDeployed $deploy8080",
+              "echo '\nService listening at port 8080:' $deploy8080 '\n'",
               "if [[ \"$isDeployed\" == \"null\" ]]; then kubectl apply -f k8s/flaskALBBlue.yaml && kubectl apply -f k8s/flaskALBGreen.yaml; else kubectl set image deployment/$deploy8080 -n flask-alb flask=$ECR_REPO_URI:$TAG; fi",
               'kubectl get deploy -n flask-alb',
               'kubectl get svc -n flask-alb'
@@ -96,11 +101,8 @@ export class CdkStackALBEksBg extends cdk.Stack {
       })
     })
 
-
-
-
-    // CODEBUILD - project2
-    const project2 = new codebuild.Project(this, 'MyProject2', {
+    // CODEBUILD - Swap services
+    const swapProject = new codebuild.Project(this, 'SwapProject', {
       projectName: `${this.stackName}2`,
       source: codebuild.Source.codeCommit({ repository }),
       environment: {
@@ -140,9 +142,11 @@ export class CdkStackALBEksBg extends cdk.Stack {
               'kubectl get svc -n flask-alb',
               "deploy8080=$(kubectl get svc -n flask-alb -o wide | grep ' 8080:' | tr ' ' '\n' | grep app= | sed 's/app=//g')",
               "deploy80=$(kubectl get svc -n flask-alb -o wide | grep ' 80:' | tr ' ' '\n' | grep app= | sed 's/app=//g')",
-              "echo $deploy80 $deploy8080",
+              "echo '\nService listening at port 80:' $deploy80 '\nService listening at port 8080:' $deploy8080 '\n'",
+              "echo '\nPATCH THE SERVICES: UPDATE SERVICE SELECTORS TO POINT TO PODS OF THE OTHER COLOR (BLUE to GREEN and GREEN to BLUE)\n'",
               "kubectl patch svc flask-svc-alb-blue -n flask-alb -p '{\"spec\":{\"selector\": {\"app\": \"'$deploy8080'\"}}}'",
               "kubectl patch svc flask-svc-alb-green -n flask-alb -p '{\"spec\":{\"selector\": {\"app\": \"'$deploy80'\"}}}'",
+              "echo 'PATCHING COMPLETE!'",
               'kubectl get deploy -n flask-alb',
               'kubectl get svc -n flask-alb'
             ]
@@ -150,10 +154,6 @@ export class CdkStackALBEksBg extends cdk.Stack {
         }
       })
     })
-
-
-
-
 
     // PIPELINE
 
@@ -172,19 +172,15 @@ export class CdkStackALBEksBg extends cdk.Stack {
       outputs: [new codepipeline.Artifact()], // optional
     });
 
-
-    const buildAction2 = new codepipeline_actions.CodeBuildAction({
+    const swapAction = new codepipeline_actions.CodeBuildAction({
       actionName: 'CodeBuild',
-      project: project2,
+      project: swapProject,
       input: sourceOutput,
     });
-
 
     const manualApprovalAction = new codepipeline_actions.ManualApprovalAction({
       actionName: 'Approve',
     });
-
-
 
     new codepipeline.Pipeline(this, 'MyPipeline', {
       stages: [
@@ -202,31 +198,32 @@ export class CdkStackALBEksBg extends cdk.Stack {
         },
         {
           stageName: 'SwapBG',
-          actions: [buildAction2],
+          actions: [swapAction],
         },
       ],
     });
-
 
     repository.onCommit('OnCommit', {
       target: new targets.CodeBuildProject(codebuild.Project.fromProjectArn(this, 'OnCommitEvent', project.projectArn))
     });
 
     ecrRepo.grantPullPush(project.role!)
+
     cluster.awsAuth.addMastersRole(project.role!)
+
     project.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`${cluster.clusterArn}`],
     }))
 
+    ecrRepo.grantPullPush(swapProject.role!)
 
-    ecrRepo.grantPullPush(project2.role!)
-    cluster.awsAuth.addMastersRole(project2.role!)
-    project2.addToRolePolicy(new iam.PolicyStatement({
+    cluster.awsAuth.addMastersRole(swapProject.role!)
+
+    swapProject.addToRolePolicy(new iam.PolicyStatement({
       actions: ['eks:DescribeCluster'],
       resources: [`${cluster.clusterArn}`],
     }))
-
 
     new cdk.CfnOutput(this, 'CodeCommitRepoName', { value: `${repository.repositoryName}` })
     new cdk.CfnOutput(this, 'CodeCommitRepoArn', { value: `${repository.repositoryArn}` })
