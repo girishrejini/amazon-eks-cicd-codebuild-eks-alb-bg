@@ -49,7 +49,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
     // CODEBUILD - project
     const project = new codebuild.Project(this, 'MyProject', {
-      projectName: `${this.stackName}`,
+      projectName: `${this.stackName}-build-project`,
       source: codebuild.Source.codeCommit({ repository }),
       environment: {
         buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage', {
@@ -103,7 +103,7 @@ export class CdkStackALBEksBg extends cdk.Stack {
 
     // CODEBUILD - Swap services
     const swapProject = new codebuild.Project(this, 'SwapProject', {
-      projectName: `${this.stackName}2`,
+      projectName: `${this.stackName}-swap-project`,
       source: codebuild.Source.codeCommit({ repository }),
       environment: {
         buildImage: codebuild.LinuxBuildImage.fromAsset(this, 'CustomImage2', {
